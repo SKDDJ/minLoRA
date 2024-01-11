@@ -12,8 +12,20 @@ import torch.nn.utils.parametrize as parametrize
 from torch import nn
 
 
+
+# #svd分解的lora
+# def reset_parameters(self):
+#     nn.Linear.reset_parameters(self)
+#     if hasattr(self, 'lora_A'):
+#         # initialize A the same way as the default for nn.Linear and B to zero
+#         u, s, v = torch.linalg.svd(self.original_weights)
+#         self.lora_A.data = (u[:, :self.rank] * s[:self.rank]).T
+#         self.lora_B.data = v[:, :self.rank] 
+#         self.prev_A.data.copy_(self.lora_A.data)  # 初始化prev_A
+#         self.prev_B.data.copy_(self.lora_B.data) 
+
 class LoRAParametrization(nn.Module):
-    def __init__(self, fan_in, fan_out, fan_in_fan_out=False, rank=4, lora_dropout_p=0.0, lora_alpha=1):
+    def __init__(self, fan_in, fan_out, fan_in_fan_out=False, rank=4, lora_dropout_p=0.0, lora_alpha=8):
         super().__init__()
         # if weight is stored as (fan_out, fan_in), the memory layout of A & B follows (W + BA)x
         # otherwise, it's x(W + AB). This allows us to tie the weights between linear layers and embeddings
@@ -68,26 +80,49 @@ class LoRAParametrization(nn.Module):
 
 default_lora_config = {  # specify which layers to add lora to, by default only add to linear layers
     nn.Linear: {
-        "weight": partial(LoRAParametrization.from_linear, rank=4),
+        "weight": partial(LoRAParametrization.from_linear, rank=8),
     },
 }
 
 
+
 def apply_lora(layer, register=True, merge=False, lora_config=default_lora_config):
+    #    这行定义了一个函数`apply_lora`，它接受一个网络层（`layer`），三个可选参数`register`（默认为True），
+    # `merge`（默认为False），和`lora_config`（默认为`default_lora_config`）。
+
     """add lora parametrization to a layer, designed to be used with model.apply"""
-    if register:
-        if type(layer) in lora_config:
+    #    这是一个文档字符串，解释了这个函数的用途：给一个层添加LoRA参数化，通常用于与`model.apply`一起使用。
+
+    if register:#    这个条件判断是检查是否需要注册LoRA参数化。
+        
+        if type(layer) in lora_config:#    如果当前层的类型在`lora_config`中定义了相应的LoRA参数化设置，则继续执行。
+            
             for attr_name, parametrization in lora_config[type(layer)].items():
+                #    遍历该层类型在`lora_config`中定义的所有LoRA参数化。
+
                 parametrize.register_parametrization(layer, attr_name, parametrization(layer))
+                #    对每个属性和参数化，调用`register_parametrization`来在层上注册LoRA参数化。
+
+                
     else:  # this will remove all parametrizations, use with caution
-        if hasattr(layer, "parametrizations"):
-            for attr_name in layer.parametrizations.keys():
+    #    如果`register`为False，则进入这个分支，这个分支将移除所有参数化。
+
+        if hasattr(layer, "parametrizations"):#    检查层是否有`parametrizations`属性。
+
+            for attr_name in layer.parametrizations.keys():#    如果有，遍历所有的参数化属性。
                 parametrize.remove_parametrizations(layer, attr_name, leave_parametrized=merge)
+            #     移除每个参数化，如果`merge`为True，则在移除时保留参数化的结果。
 
 
+
+
+#    定义了一个函数`add_lora`，接受一个模型和一个可选的LoRA配置（默认为`default_lora_config`）。
 def add_lora(model, lora_config=default_lora_config):
     """add lora parametrization to all layers in a model. Calling it twice will add lora twice"""
+    #    文档字符串说明了这个函数的功能：给模型中所有层添加LoRA参数化。如果调用两次，会添加两次LoRA。
     model.apply(partial(apply_lora, lora_config=lora_config))
+#    使用`apply`方法在模型的所有层上应用`apply_lora`函数。这里用到了`partial`，
+# 它创建了一个新的函数，将`lora_config`作为参数预先填充到`apply_lora`中。
 
 
 def add_lora_by_name(model, target_module_names, lora_config=default_lora_config):
@@ -105,3 +140,7 @@ def merge_lora(model):
 def remove_lora(model):
     """remove lora parametrization to all layers in a model. This will remove all parametrization"""
     model.apply(partial(apply_lora, register=False, merge=False))
+
+
+
+

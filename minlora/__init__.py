@@ -1,4 +1,4 @@
-from minlora.model import LoRAParametrization, add_lora, default_lora_config, merge_lora, remove_lora
+from minlora.model import LoRAParametrization, add_lora, default_lora_config, merge_lora, remove_lora, add_lora_by_name
 from minlora.utils import (
     apply_to_lora,
     disable_lora,
